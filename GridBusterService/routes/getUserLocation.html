@@ -70,7 +70,7 @@
       // failed.", it means you probably did not give permission for the browser to
       // locate you.
       // <a href="https://icons8.com">Icon pack by Icons8</a>
-      var map, infoWindow;
+      var map, infoWindow,travel_details = [];
       function initMap() {
         map = new google.maps.Map(document.getElementById('map'), {
           center: {lat: -34.397, lng: 150.644},
@@ -226,6 +226,39 @@
                                 strokeColor: color_code[mode]
                               }});  
         directionsDisplay.setMap(map)
+
+        var geocoder = new google.maps.Geocoder();
+        var sourcelatlng = new google.maps.LatLng(source.lat,source.lng);
+        var destlatlng = new google.maps.LatLng(dest.lat,dest.lng);
+
+        var promise = [];
+        if(geocoder)
+        {
+          promise.push(new Promise(function(resolve,reject){
+            geocoder.geocode({'location':sourcelatlng},function(results,status){
+                      if(status == google.maps.GeocoderStatus.OK)
+                      {
+                        var source_formatted_address = results[0].formatted_address;
+                        resolve(source_formatted_address)
+                        console.log(source_formatted_address)
+                      }
+                    })
+          }))
+
+          promise.push(geocoder.geocode({'location':destlatlng},function(results,status){
+                      if(status == google.maps.GeocoderStatus.OK)
+                      {
+                        var dest_formatted_address = results[0].formatted_address; 
+                        console.log(dest_formatted_address)
+                      }
+                    }))
+
+          Promise.all(promise).then(function(data){
+            console.log(data)
+          })
+
+
+        }
           
         var request = {
         origin:new google.maps.LatLng(source.lat,source.lng),
