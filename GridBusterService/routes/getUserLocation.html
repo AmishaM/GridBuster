@@ -1,0 +1,337 @@
+<!-- Create a new displaydirections object to show multiple routes  -->
+<!-- Pass suppressmarkers: true object to displaydirections to prevent showing A and B -->
+<!-- You can also use polylines to show lines of various colors  -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Geolocation</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    
+    <style>
+      /* Always set the map height explicitly to define the size of the div
+       * element that contains the map. */
+      #map {
+        height: 50%;
+      }
+      .page-header h3{
+        margin-left: 30px;
+      }
+
+      .cab,.transit{
+        height: 12px;
+        width: 12px;
+        display: inline-block;
+        margin: 0 5px;
+      }
+
+      .cab{
+        background-color: #6A1B9A;
+      }
+      .transit{
+        background-color: #009688;
+      }
+      /* Optional: Makes the sample page fill the window. */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-header">
+        <h3>GridBuster</h3>
+    </div>
+    
+    <div class="col-md-6 col-md-offset-3 col-sm-12">
+        <div class="form-group">
+            <input type="text" class="form-control" id="source" placeholder="Your location" disabled="true">
+        </div>
+        <div class="form-group">
+            <input type="text" class="form-control" id="destination" placeholder="Destination">
+        </div>
+    </div>
+
+    <div id="map" class="col-md-6 col-md-offset-3 col-sm-12"></div>
+    <div class="col-md-6 col-md-offset-3 col-sm-12">
+      <div class="legend">
+        <span class="cab"></span><span>Our Cab Service</span>
+        <span class="transit"></span><span>Public Transit (BMTC)</span>
+        <div class="travel-details">
+        </div>
+      </div>
+    </div>
+    <script>
+      // Note: This example requires that you consent to location sharing when
+      // prompted by your browser. If you see the error "The Geolocation service
+      // failed.", it means you probably did not give permission for the browser to
+      // locate you.
+      // <a href="https://icons8.com">Icon pack by Icons8</a>
+      var map, infoWindow;
+      function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: {lat: -34.397, lng: 150.644},
+          zoom: 15
+        });
+        infoWindow = new google.maps.InfoWindow;
+
+        // Try HTML5 geolocation.
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+
+            console.log(position)
+            infoWindow.setPosition(pos);
+            infoWindow.setContent('Your location.');
+            infoWindow.open(map);
+            map.setCenter(pos);
+            getCabsNearMe(pos,map);
+
+            var geocoder = new google.maps.Geocoder();
+            var latlng = new google.maps.LatLng(pos.lat,pos.lng);
+
+            var source = document.getElementById('source');
+            var destination = document.getElementById('destination');
+
+            if(geocoder)
+            {
+              geocoder.geocode({'latLng':latlng},function(results,status){
+                if(status == google.maps.GeocoderStatus.OK)
+                {
+                  source.value = results[0].formatted_address;
+                }
+              })
+            }
+            
+
+            var destinationAutoComplete = new google.maps.places.Autocomplete(destination);
+
+            destinationAutoComplete.bindTo('bounds',map);
+            destinationAutoComplete.addListener('place_changed',function(){
+              var place = destinationAutoComplete.getPlace();
+              
+              var directionsService = new google.maps.DirectionsService();
+              
+              var request = {
+              origin:new google.maps.LatLng(pos.lat,pos.lng),
+              destination:new google.maps.LatLng(place.geometry.location.lat(),place.geometry.location.lng()),
+              travelMode: 'TRANSIT'
+            };
+              directionsService.route(request, function(result, status) {
+                if (status == 'OK') {
+                  console.log(result)
+                  getRoute(result.routes[0].legs[0].steps,map);
+                 // directionsDisplay.setDirections(result)
+                }
+              });
+            
+/*              var placesRequest = {
+                location: new google.maps.LatLng(13.0241078,77.6266931),
+                radius: 3000,
+                types: ['bus_station']
+              };
+*/
+              /*service = new google.maps.places.PlacesService(map);
+              service.search(placesRequest, function(results,status){
+                if(status== 'OK')
+                {
+                  console.log(results)
+
+                }
+              });*/
+
+
+            })
+            
+          }, function() {
+            handleLocationError(true, infoWindow, map.getCenter());
+          });
+        } else {
+          // Browser doesn't support Geolocation
+          handleLocationError(false, infoWindow, map.getCenter());
+        }
+      }
+
+      function handleLocationError(browserHasGeolocation, infoWindow, pos) {
+        infoWindow.setPosition(pos);
+        infoWindow.setContent(browserHasGeolocation ?
+                              'Error: The Geolocation service failed.' :
+                              'Error: Your browser doesn\'t support geolocation.');
+        infoWindow.open(map);
+      }
+
+      function getRoute(routeSteps,map)
+      {
+        console.log(routeSteps);
+        //check if total distance of travel is 2km,then just use cab
+        //intialCabRoute(routeSteps,map);
+        generateRoute(routeSteps,map);
+      }
+
+      function generateRoute(routeSteps,map)
+      {
+        var cabDistance = 0;
+        
+        var currentLocation = {lat:routeSteps[0].start_location.lat(),lng:routeSteps[0].start_location.lng()}
+        var nextLocation = {}
+
+        for(var i=0; i < routeSteps.length; i++)
+        {
+          cabDistance += routeSteps[i].distance.value;
+          if(cabDistance <= 2000)
+          {
+            nextLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng()}
+          }
+          else
+          {
+            console.log("entered")
+            drawRoute('DRIVING',currentLocation,nextLocation)
+      
+
+            if(routeSteps[i].travel_mode == 'TRANSIT')
+            {
+              currentLocation = {lat:routeSteps[i].start_location.lat(),lng: routeSteps[i].start_location.lng()}
+              nextLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng()}
+              drawRoute('TRANSIT',currentLocation,nextLocation);
+              lastCabStep = i;
+              initialCabStep = i;
+              cabDistance = 0;
+              currentLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng()}
+
+            }
+          }
+          
+        }
+      }
+
+      function drawRoute(mode,source,dest)
+      {
+
+        console.log(mode)
+        console.log(source.lat + " - " + source.lng)
+        console.log(dest.lat + " - " + dest.lng)
+        var color_code = {'DRIVING':"#6A1B9A",'TRANSIT':"#009688"}
+        //var source = {lat: source.start_location.lat(),lng:source.start_location.lng()}
+        //var dest = {lat:dest.end_location.lat(),lng:dest.end_location.lng()}
+          
+        //displayCabRoute(source,dest,map)
+        var directionsService = new google.maps.DirectionsService();
+        var directionsDisplay = new google.maps.DirectionsRenderer({suppressMarkers: true,polylineOptions: {
+                                strokeColor: color_code[mode]
+                              }});  
+        directionsDisplay.setMap(map)
+          
+        var request = {
+        origin:new google.maps.LatLng(source.lat,source.lng),
+        destination:new google.maps.LatLng(dest.lat,dest.lng),
+        travelMode: mode
+        };
+        
+        directionsService.route(request, function(result, status) {
+              if (status == 'OK') {
+
+                directionsDisplay.setDirections(result)
+              }
+            });
+      }
+
+      /*function intialCabRoute(routeSteps,map)
+      {
+        //intial cab distance would range from 500m to 2KM
+        var cabDistance = 0;
+        var firstCabStep = 0;
+        var lastCabStep = 0;
+    
+        for(var i=0;i<routeSteps.length;i++)
+        {
+          cabDistance += routeSteps[i].distance.value;
+          if(cabDistance <= 2000)
+          {
+            lastCabStep = i;
+          }
+          else
+          {
+            //lastcabstep can be -ve
+            lastCabStep = i-1;
+            break;
+          }
+        }
+      
+        if(firstCabStep != lastCabStep)
+        {
+
+          var source = {lat: routeSteps[firstCabStep].start_location.lat(),lng:routeSteps[firstCabStep].start_location.lng()}
+          var dest = {lat:routeSteps[firstCabStep].start_location.lat(),lng:routeSteps[firstCabStep].start_location.lng()}
+          
+          displayCabRoute(source,dest,map)          
+
+        }
+        else
+        {
+          var source = {lat: routeSteps[firstCabStep].start_location.lat(),lng:routeSteps[firstCabStep].start_location.lng()}
+          var dest = {lat:routeSteps[firstCabStep].end_location.lat(),lng:routeSteps[firstCabStep].end_location.lng()}
+
+          displayCabRoute(source,dest,map)
+        }
+
+      }*/
+
+      /*function displayCabRoute(source,dest,map)
+      {
+        var directionsService = new google.maps.DirectionsService();
+        var directionsDisplay = new google.maps.DirectionsRenderer({suppressMarkers: true,polylineOptions: {
+                                strokeColor: "#66BB6A"
+                              }});  
+        directionsDisplay.setMap(map)
+          
+        var request = {
+        origin:new google.maps.LatLng(source.lat,source.lng),
+        destination:new google.maps.LatLng(dest.lat,dest.lng),
+        travelMode: 'DRIVING'
+        };
+        
+        directionsService.route(request, function(result, status) {
+              if (status == 'OK') {
+                directionsDisplay.setDirections(result)
+              }
+            });
+
+      }*/
+
+      function getCabsNearMe(pos,map)
+      {
+        var xhttp = new XMLHttpRequest();
+        xhttp.onreadystatechange = function(){
+          if(this.readyState == 4 && this.status == 200)
+          {
+            var cabDetails = JSON.parse(this.responseText)
+            var cabs = cabDetails.cabs;
+            var cabImage = cabDetails.marker;
+
+            
+            cabs.map(function(cab){
+                var marker = new google.maps.Marker({
+                position:  new google.maps.LatLng(cab.lat, cab.lng),
+                icon: cabImage,
+                map: map,
+              });
+            });
+          }
+        }
+        xhttp.open("GET",`http://localhost:4000/api/cabs?lat=${pos['lat']}&lng=${pos['lng']}`);
+        xhttp.send();
+      }
+    </script>
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAkCyVn69Y94YPFlz0_T3bSUWSGIrHL6yo&libraries=places&callback=initMap">
+    </script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+  </body>
+</html>
