@@ -9,6 +9,7 @@
     <meta charset="utf-8">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <link rel="stylesheet" type="text/css" href="//fonts.googleapis.com/css?family=Raleway" />
     
     <style>
       /* Always set the map height explicitly to define the size of the div
@@ -33,11 +34,39 @@
       .transit{
         background-color: #009688;
       }
+      .otp{
+        background-color: #ffffb3;
+      }
+      .driver-details{
+        background-color: #e6e6e6;
+        padding: 10px;
+      }
+
+      .travel-details{
+        margin-bottom: 50px;
+      }
+
+      .step-detail-block{
+        background-color: #f2f2f2;
+        padding: 10px;
+        margin: 10px 0px 10px 20px;
+      }
+
+      .cost,.total-cost,.bus-arrival{
+        font-weight: bold;
+      }
+      .total-cost{
+        font-size: 25px;
+      }
+      .pay-now{
+        margin: 0 20px;
+      }
       /* Optional: Makes the sample page fill the window. */
       html, body {
         height: 100%;
         margin: 0;
         padding: 0;
+        font-family: Raleway;
       }
     </style>
   </head>
@@ -60,7 +89,7 @@
       <div class="legend">
         <span class="cab"></span><span>Our Cab Service</span>
         <span class="transit"></span><span>Public Transit (BMTC)</span>
-        <div class="travel-details">
+        <div class="travel-details" id="travel-details">
         </div>
       </div>
     </div>
@@ -70,7 +99,9 @@
       // failed.", it means you probably did not give permission for the browser to
       // locate you.
       // <a href="https://icons8.com">Icon pack by Icons8</a>
-      var map, infoWindow,travel_details = [];
+      var map, infoWindow,travel_details, instructions= [];
+      var promises = []
+      var step = 0;
       function initMap() {
         map = new google.maps.Map(document.getElementById('map'), {
           center: {lat: -34.397, lng: 150.644},
@@ -86,7 +117,6 @@
               lng: position.coords.longitude
             };
 
-            console.log(position)
             infoWindow.setPosition(pos);
             infoWindow.setContent('Your location.');
             infoWindow.open(map);
@@ -130,23 +160,6 @@
                  // directionsDisplay.setDirections(result)
                 }
               });
-            
-/*              var placesRequest = {
-                location: new google.maps.LatLng(13.0241078,77.6266931),
-                radius: 3000,
-                types: ['bus_station']
-              };
-*/
-              /*service = new google.maps.places.PlacesService(map);
-              service.search(placesRequest, function(results,status){
-                if(status== 'OK')
-                {
-                  console.log(results)
-
-                }
-              });*/
-
-
             })
             
           }, function() {
@@ -168,9 +181,8 @@
 
       function getRoute(routeSteps,map)
       {
-        console.log(routeSteps);
         //check if total distance of travel is 2km,then just use cab
-        //intialCabRoute(routeSteps,map);
+      
         generateRoute(routeSteps,map);
       }
 
@@ -178,7 +190,7 @@
       {
         var cabDistance = 0;
         
-        var currentLocation = {lat:routeSteps[0].start_location.lat(),lng:routeSteps[0].start_location.lng()}
+        var currentLocation = {lat:routeSteps[0].start_location.lat(),lng:routeSteps[0].start_location.lng(),instructions:routeSteps[0].instructions}
         var nextLocation = {}
 
         for(var i=0; i < routeSteps.length; i++)
@@ -186,41 +198,80 @@
           cabDistance += routeSteps[i].distance.value;
           if(cabDistance <= 2000)
           {
-            nextLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng()}
+            nextLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng(),instructions:routeSteps[i].instructions}
           }
           else
           {
-            console.log("entered")
             drawRoute('DRIVING',currentLocation,nextLocation)
-      
+            cabDistance = 0;
 
             if(routeSteps[i].travel_mode == 'TRANSIT')
             {
-              currentLocation = {lat:routeSteps[i].start_location.lat(),lng: routeSteps[i].start_location.lng()}
-              nextLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng()}
+              currentLocation = {lat:routeSteps[i].start_location.lat(),lng: routeSteps[i].start_location.lng(),instructions:routeSteps[i].instructions}
+              nextLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng(),instructions:routeSteps[i].instructions}
               drawRoute('TRANSIT',currentLocation,nextLocation);
-              lastCabStep = i;
-              initialCabStep = i;
-              cabDistance = 0;
-              currentLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng()}
+              
+              currentLocation = {lat:routeSteps[i].end_location.lat(),lng:routeSteps[i].end_location.lng(),instructions:routeSteps[i].instructions}
 
             }
           }
           
         }
+      
+        if(cabDistance <= 2000)
+        {
+          currentLocation = {lat:routeSteps[i-1].start_location.lat(),lng:routeSteps[i-1].start_location.lng(),instructions:routeSteps[i-1].instructions}
+          nextLocation = {lat:routeSteps[i-1].end_location.lat(),lng:routeSteps[i-1].end_location.lng(),instructions:routeSteps[i-1].instructions}
+          drawRoute('DRIVING',currentLocation,nextLocation) 
+        }
+      
+        
+        console.log(JSON.stringify(instructions))
+        $('#travel-details').append(`<p class='driver-details'>Driver name : Mr. Sudaresh <br> White Indica KA 09 GU-9933 <br> <span class='otp'>OTP: 8890</span></p>`)
+        
+        Promise.all(promises).then(function(instructions){
+        console.log(JSON.stringify(instructions))
+        var total_cost = 0;
+        instructions[0].map(function(data){ 
+          if(data.arrival_time)
+          {
+            $('#travel-details').append(`<div class="step-detail-block"><div class='inst'>${data.inst}</div><div class='distance'>Distance : ${data.distance}</div><div>Duration : ${data.duration}</div><div class="cost">Cost: &#8377 ${data.cost}</div><div class="bus-arrival">The bus will arrive at ${data.departure_time}</div></div>`)
+          }
+          else
+            $('#travel-details').append(`<div class="step-detail-block"><div class='inst'>${data.inst}</div><div class='distance'>Distance : ${data.distance}</div><div>Duration : ${data.duration}</div><div class="cost">Cost: &#8377 ${data.cost}</div></div>`)
+        total_cost += parseFloat(data.cost)
+        })
+
+        $('#travel-details').append(`<div class="summary"><div class="total-cost">Total cost : ${total_cost} <button class="btn btn-success pay-now">Pay Now</button></div><div class="info">You will recieve an OTP everytime you are about to take a different mode of transportation. <br /> That OTP would validate that you have already paid for the ticket</div></div>`)
+
+
+       })
+
+        
       }
 
       function drawRoute(mode,source,dest)
       {
-
-        console.log(mode)
-        console.log(source.lat + " - " + source.lng)
-        console.log(dest.lat + " - " + dest.lng)
         var color_code = {'DRIVING':"#6A1B9A",'TRANSIT':"#009688"}
-        //var source = {lat: source.start_location.lat(),lng:source.start_location.lng()}
-        //var dest = {lat:dest.end_location.lat(),lng:dest.end_location.lng()}
           
-        //displayCabRoute(source,dest,map)
+        if(! instructions[step])
+            instructions[step] = {}
+        if(mode == 'DRIVING')
+        {
+          var inst = source.instructions;
+          var modified_inst = inst.replace("Walk to ","");
+          modified_inst = "The cab will drop you to " + modified_inst;
+          
+          instructions[step] = {inst: modified_inst}
+        }
+        else{
+          var inst = source.instructions;
+          var modified_inst = inst.replace("Bus", "You would have to take a bus")
+          instructions[step] = {inst: modified_inst}
+        }
+        //console.log(step)
+        
+
         var directionsService = new google.maps.DirectionsService();
         var directionsDisplay = new google.maps.DirectionsRenderer({suppressMarkers: true,polylineOptions: {
                                 strokeColor: color_code[mode]
@@ -231,34 +282,8 @@
         var sourcelatlng = new google.maps.LatLng(source.lat,source.lng);
         var destlatlng = new google.maps.LatLng(dest.lat,dest.lng);
 
-        var promise = [];
-        if(geocoder)
-        {
-          promise.push(new Promise(function(resolve,reject){
-            geocoder.geocode({'location':sourcelatlng},function(results,status){
-                      if(status == google.maps.GeocoderStatus.OK)
-                      {
-                        var source_formatted_address = results[0].formatted_address;
-                        resolve(source_formatted_address)
-                        console.log(source_formatted_address)
-                      }
-                    })
-          }))
-
-          promise.push(geocoder.geocode({'location':destlatlng},function(results,status){
-                      if(status == google.maps.GeocoderStatus.OK)
-                      {
-                        var dest_formatted_address = results[0].formatted_address; 
-                        console.log(dest_formatted_address)
-                      }
-                    }))
-
-          Promise.all(promise).then(function(data){
-            console.log(data)
-          })
-
-
-        }
+        
+        
           
         var request = {
         origin:new google.maps.LatLng(source.lat,source.lng),
@@ -266,77 +291,54 @@
         travelMode: mode
         };
         
-        directionsService.route(request, function(result, status) {
-              if (status == 'OK') {
-
-                directionsDisplay.setDirections(result)
-              }
-            });
+        
+        promises.push( new Promise(function(resolve,reject)
+          {
+            directionsService.route(request, function(step,mode,result,status) {
+                      if (status == 'OK') {
+                        
+        
+                        
+                        
+                        if(result.routes[0].legs[0].distance)
+                          {
+                            var cost = getFare(mode,result.routes[0].legs[0].distance.value)
+                            instructions[step]['distance'] = result.routes[0].legs[0].distance.text;
+                            instructions[step]['cost'] = cost;
+                          }
+                        
+                        if(result.routes[0].legs[0].duration)
+                          instructions[step]['duration'] = result.routes[0].legs[0].duration.text;
+                        
+                        if(result.routes[0].legs[0].departure_time)
+                          instructions[step]['departure_time'] = result.routes[0].legs[0].departure_time.text;
+                        
+                        if(result.routes[0].legs[0].arrival_time)
+                          instructions[step]['arrival_time'] = result.routes[0].legs[0].arrival_time.text;
+                        
+                        resolve(instructions)
+                        directionsDisplay.setDirections(result)
+                      }
+                    }.bind(this,step,mode))
+          }
+          ))
+      step++;
       }
 
-      /*function intialCabRoute(routeSteps,map)
-      {
-        //intial cab distance would range from 500m to 2KM
-        var cabDistance = 0;
-        var firstCabStep = 0;
-        var lastCabStep = 0;
-    
-        for(var i=0;i<routeSteps.length;i++)
-        {
-          cabDistance += routeSteps[i].distance.value;
-          if(cabDistance <= 2000)
-          {
-            lastCabStep = i;
-          }
-          else
-          {
-            //lastcabstep can be -ve
-            lastCabStep = i-1;
-            break;
-          }
-        }
       
-        if(firstCabStep != lastCabStep)
-        {
 
-          var source = {lat: routeSteps[firstCabStep].start_location.lat(),lng:routeSteps[firstCabStep].start_location.lng()}
-          var dest = {lat:routeSteps[firstCabStep].start_location.lat(),lng:routeSteps[firstCabStep].start_location.lng()}
-          
-          displayCabRoute(source,dest,map)          
-
-        }
-        else
-        {
-          var source = {lat: routeSteps[firstCabStep].start_location.lat(),lng:routeSteps[firstCabStep].start_location.lng()}
-          var dest = {lat:routeSteps[firstCabStep].end_location.lat(),lng:routeSteps[firstCabStep].end_location.lng()}
-
-          displayCabRoute(source,dest,map)
-        }
-
-      }*/
-
-      /*function displayCabRoute(source,dest,map)
+      function getFare(mode,distance)
       {
-        var directionsService = new google.maps.DirectionsService();
-        var directionsDisplay = new google.maps.DirectionsRenderer({suppressMarkers: true,polylineOptions: {
-                                strokeColor: "#66BB6A"
-                              }});  
-        directionsDisplay.setMap(map)
-          
-        var request = {
-        origin:new google.maps.LatLng(source.lat,source.lng),
-        destination:new google.maps.LatLng(dest.lat,dest.lng),
-        travelMode: 'DRIVING'
-        };
-        
-        directionsService.route(request, function(result, status) {
-              if (status == 'OK') {
-                directionsDisplay.setDirections(result)
-              }
-            });
-
-      }*/
-
+        var cost = 0;
+        if(mode == 'DRIVING')
+          cost = (distance/1000) * 5;
+        if(mode == 'TRANSIT')
+          if(distance < 3)
+            cost = 5;
+          else
+            cost = (distance/1000) * 1.5;
+        return cost.toFixed(2)
+      }
       function getCabsNearMe(pos,map)
       {
         var xhttp = new XMLHttpRequest();
