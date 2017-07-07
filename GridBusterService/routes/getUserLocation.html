@@ -61,6 +61,12 @@
       .pay-now{
         margin: 0 20px;
       }
+      .src-dest-wrapper, .legend-wrapper{
+        padding-left: 0px;
+      }
+      .src-dest-wrapper input{
+        height: 40px; 
+      }
       /* Optional: Makes the sample page fill the window. */
       html, body {
         height: 100%;
@@ -75,17 +81,17 @@
         <h3>GridBuster</h3>
     </div>
     
-    <div class="col-md-6 col-md-offset-3 col-sm-12">
+    <div class="col-md-6 col-md-offset-1 col-sm-12 src-dest-wrapper">
         <div class="form-group">
-            <input type="text" class="form-control" id="source" placeholder="Your location" disabled="true">
+            <input type="text" class="form-control" id="source" placeholder="Your location">
         </div>
         <div class="form-group">
             <input type="text" class="form-control" id="destination" placeholder="Destination">
         </div>
     </div>
 
-    <div id="map" class="col-md-6 col-md-offset-3 col-sm-12"></div>
-    <div class="col-md-6 col-md-offset-3 col-sm-12">
+    <div id="map" class="col-md-10 col-md-offset-1 col-sm-12"></div>
+    <div class="col-md-6 col-md-offset-1 col-sm-12 legend-wrapper">
       <div class="legend">
         <span class="cab"></span><span>Our Cab Service</span>
         <span class="transit"></span><span>Public Transit (BMTC)</span>
@@ -101,6 +107,8 @@
       // <a href="https://icons8.com">Icon pack by Icons8</a>
       var map, infoWindow,travel_details, instructions= [];
       var promises = []
+      var markedRoutes = []
+      var infoWindowList = []
       var step = 0;
       function initMap() {
         map = new google.maps.Map(document.getElementById('map'), {
@@ -117,11 +125,13 @@
               lng: position.coords.longitude
             };
 
-            infoWindow.setPosition(pos);
+            getCabsAndShowInfoWindow(map,pos);
+
+            /*infoWindow.setPosition(pos);
             infoWindow.setContent('Your location.');
             infoWindow.open(map);
             map.setCenter(pos);
-            getCabsNearMe(pos,map);
+            getCabsNearMe(pos,map);*/
 
             var geocoder = new google.maps.Geocoder();
             var latlng = new google.maps.LatLng(pos.lat,pos.lng);
@@ -139,25 +149,52 @@
               })
             }
             
-
+            var sourceAutoComplete = new google.maps.places.Autocomplete(source)
             var destinationAutoComplete = new google.maps.places.Autocomplete(destination);
 
+            sourceAutoComplete.addListener('place_changed',function(){
+              var sourcePlace = sourceAutoComplete.getPlace();
+              var sourceLat;
+              var sourceLng;
+
+              sourceLat = sourcePlace.geometry.location.lat();
+              sourceLng = sourcePlace.geometry.location.lng();
+              var pos = {lat:sourceLat,lng:sourceLng}
+              getCabsAndShowInfoWindow(map,pos);
+            }.bind(this,map))
+
+            sourceAutoComplete.bindTo('bounds',map);
             destinationAutoComplete.bindTo('bounds',map);
             destinationAutoComplete.addListener('place_changed',function(){
+              var sourcePlace = sourceAutoComplete.getPlace();
               var place = destinationAutoComplete.getPlace();
-              
+              var sourceLat;
+              var sourceLng;
+
+              if(sourcePlace)
+              {
+                sourceLat = sourcePlace.geometry.location.lat();
+                sourceLng = sourcePlace.geometry.location.lng();
+              }
+              else
+              {
+                sourceLat = pos.lat;
+                sourceLng = pos.lng;
+              }
+
               var directionsService = new google.maps.DirectionsService();
               
               var request = {
-              origin:new google.maps.LatLng(pos.lat,pos.lng),
+              origin:new google.maps.LatLng(sourceLat,sourceLng),
               destination:new google.maps.LatLng(place.geometry.location.lat(),place.geometry.location.lng()),
               travelMode: 'TRANSIT'
             };
               directionsService.route(request, function(result, status) {
                 if (status == 'OK') {
                   console.log(result)
+                  //clearScreenAndMap()
                   getRoute(result.routes[0].legs[0].steps,map);
-                 // directionsDisplay.setDirections(result)
+                 //directionsDisplay.setMap(null)
                 }
               });
             })
@@ -169,6 +206,32 @@
           // Browser doesn't support Geolocation
           handleLocationError(false, infoWindow, map.getCenter());
         }
+      }
+
+      function getCabsAndShowInfoWindow(map,pos){
+        console.log("******************")
+        console.log(infoWindowList)
+        infoWindowList.map(function(infoWindowObject){
+          infoWindowObject.close();
+        });
+
+        var infoWindow = new google.maps.InfoWindow;
+        infoWindowList.push(infoWindow)
+        infoWindow.setPosition(pos);
+        infoWindow.setContent('Your location.');
+        infoWindow.open(map);
+        map.setCenter(pos);
+        getCabsNearMe(pos,map);
+      }
+
+      function clearScreenAndMap()
+      {
+        markedRoutes.map(function(directionsDisplayObject){
+          console.log(directionsDisplayObject)
+          directionsDisplayObject.setMap(null)
+        });
+        $('#travel-details').html('');
+
       }
 
       function handleLocationError(browserHasGeolocation, infoWindow, pos) {
@@ -242,7 +305,8 @@
         total_cost += parseFloat(data.cost)
         })
 
-        $('#travel-details').append(`<div class="summary"><div class="total-cost">Total cost : ${total_cost} <button class="btn btn-success pay-now">Pay Now</button></div><div class="info">You will recieve an OTP everytime you are about to take a different mode of transportation. <br /> That OTP would validate that you have already paid for the ticket</div></div>`)
+
+        $('#travel-details').append(`<div class="summary"><div class="total-cost">Total cost : ${total_cost.toFixed(2)} <button class="btn btn-success pay-now" onclick="window.open('https://paytm.com','_blank')">Pay Now</button></div><div class="info">You will recieve an OTP everytime you are about to take a different mode of transportation. <br /> That OTP would validate that you have already paid for the ticket</div></div>`)
 
 
        })
@@ -276,6 +340,7 @@
         var directionsDisplay = new google.maps.DirectionsRenderer({suppressMarkers: true,polylineOptions: {
                                 strokeColor: color_code[mode]
                               }});  
+        markedRoutes.push(directionsDisplay)
         directionsDisplay.setMap(map)
 
         var geocoder = new google.maps.Geocoder();
